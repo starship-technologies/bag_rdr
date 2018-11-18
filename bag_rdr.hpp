@@ -28,7 +28,11 @@
 #include "common/common_result.hpp"
 #include "common/unix_err.hpp"
 
+#include <functional>
+
+#ifndef BAG_RDR_NO_ROS
 #include <ros/serialization.h>
+#endif
 
 /**
  * A minimal, zero-copy memory-map based ROS
@@ -75,6 +79,7 @@ struct bag_rdr
 
 struct bag_rdr::message
 {
+#ifndef BAG_RDR_NO_ROS
     template <class T>
     bool to(T& t) const
     {
@@ -108,6 +113,7 @@ struct bag_rdr::message
         map["latching"] = latching_str().to_string();
         ros::serialization::PreDeserialize<T>::notify(predes);
     }
+#endif // !defined(BAG_RDR_NO_ROS)
 
     timestamp stamp;
     string_view topic() const;

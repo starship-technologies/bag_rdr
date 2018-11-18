@@ -23,6 +23,7 @@
 #include "bag_rdr.hpp"
 #include <numeric>
 #include <cstdio>
+#include <map>
 
 static bool print_sizes(const char* bag)
 {

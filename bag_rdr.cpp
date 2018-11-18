@@ -35,7 +35,11 @@
 #include <numeric>
 
 #include <bzlib.h>
+#ifdef BAG_RDR_USE_SYSTEM_LZ4
+#include <lz4frame.h>
+#else
 #include <roslz4/lz4s.h>
+#endif
 
 using common::result;
 using common::ok;
@@ -358,6 +362,57 @@ chunk::chunk(record r)
     }
 }
 
+#ifdef BAG_RDR_USE_SYSTEM_LZ4
+
+struct lz4f_ctx
+{
+    LZ4F_dctx* ctx{nullptr};
+    ~lz4f_ctx() {
+        if (ctx)
+            LZ4F_freeDecompressionContext(ctx);
+    }
+    operator LZ4F_dctx*() {
+        return ctx;
+    }
+};
+
+static bool s_decompress_lz4(common::array_view<const char> memory, common::array_view<char> to)
+{
+    lz4f_ctx ctx;
+    LZ4F_errorCode_t code = LZ4F_createDecompressionContext(&ctx.ctx, LZ4F_VERSION);
+    if (LZ4F_isError(code))
+        return code;
+    while (memory.size() && to.size()) {
+        size_t dest_size = to.size();
+        size_t src_size = memory.size();
+        size_t ret = LZ4F_decompress(ctx,
+                  (void*)     to.begin(), &dest_size,
+            (const void*) memory.begin(), &src_size,
+            nullptr);
+        if (LZ4F_isError(ret)) {
+            fprintf(stderr, "chunk::decompress: lz4 decompression returned %zu, expected %zu\n", ret, to.size());
+            return false;
+        }
+        memory = memory.advance(src_size);
+        to = to.advance(dest_size);
+    }
+    if (memory.size() || to.size())
+        fprintf(stderr, "chunk::decompress: lz4 decompression left %zu/%zu bytes in buffer\n", memory.size(), to.size());
+    return (memory.size() == 0) && (to.size() == 0);
+}
+#else
+static bool s_decompress_lz4(common::array_view<const char> memory, common::array_view<char> to)
+{
+    unsigned int dest_len = to.size();
+    int lz4_ret = roslz4_buffToBuffDecompress((char*)memory.data(), memory.size(),
+                                              to.data(), &dest_len);
+    if (lz4_ret != ROSLZ4_OK) {
+        fprintf(stderr, "chunk::decompress: lz4 decompression returned %d, expected %zu\n", lz4_ret, to.size());
+        return false;
+    }
+    return true;
+}
+#endif
 
 bool chunk::decompress()
 {
@@ -383,14 +438,8 @@ bool chunk::decompress()
             break;
         }
         case LZ4: {
-            unsigned int dest_len = uncompressed_buffer.size();
-            int lz4_ret = roslz4_buffToBuffDecompress((char*)memory.data(), memory.size(),
-                                                      uncompressed_buffer.data(), &dest_len);
-            if (lz4_ret != ROSLZ4_OK) {
-                fprintf(stderr, "chunk::decompress: lz4 decompression returned %d, expected %zu\n", lz4_ret, uncompressed_buffer.size());
+            if (!s_decompress_lz4(memory, uncompressed_buffer))
                 return false;
-            }
-            break;
         }
         case NORMAL: break;
     }
