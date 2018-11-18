@@ -723,6 +723,22 @@ bool bag_rdr::view::has_topic(common::string_view topic)
     return false;
 }
 
+void bag_rdr::view::for_each_connection(const std::function<void (const connection_data& data)>& fn)
+{
+    ensure_indices();
+    for (size_t index: m_connection_indices) {
+        const auto& conn = rdr.d->connections[index];
+        fn(connection_data {
+            .topic = conn.topic,
+            .datatype = conn.data.type,
+            .md5sum = conn.data.md5sum,
+            .msg_def = conn.data.message_definition,
+            .callerid = conn.data.callerid,
+            .latching = conn.data.latching,
+        });
+    }
+}
+
 static bool increment_pos_ref(const bag_rdr::connection_record& conn, bag_rdr::view::iterator::pos_ref& pos)
 {
     assert_print(pos.block != -1);

@@ -184,6 +184,16 @@ struct bag_rdr::view
 
     std::vector<string_view> present_topics();
     bool has_topic(string_view topic);
+    struct connection_data
+    {
+        string_view topic;
+        string_view datatype;
+        string_view md5sum;
+        string_view msg_def;
+        string_view callerid;
+        bool latching;
+    };
+    void for_each_connection(const std::function<void (const connection_data& data)>& fn);
 
     void ensure_indices();
 
