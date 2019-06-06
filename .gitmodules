@@ -1,3 +1,3 @@
 [submodule "deps/common_cxx"]
 	path = deps/common_cxx
-	url = https://starship-technologies/common_cxx
+	url = https://github.com/starship-technologies/common_cxx.git
