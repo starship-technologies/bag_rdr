@@ -55,6 +55,7 @@ struct bag_rdr
     ~bag_rdr();
     bool open(const char* filename);
     result<ok, unix_err> open_detailed(const char* filename);
+    result<ok, unix_err> open_memory(array_view<const char> memory);
 
     timestamp start_timestamp() const;
     timestamp end_timestamp() const;

@@ -505,6 +505,19 @@ result<ok, unix_err> bag_rdr::open_detailed(const char* filename)
     return ok{};
 }
 
+result<ok, unix_err> bag_rdr::open_memory(array_view<const char> memory)
+{
+    d->memory = memory;
+    d->filename = "<memory>";
+    if (!internal_read_initial().size()) {
+        return unix_err{EFAULT};
+    }
+    if (!internal_load_records()) {
+        return unix_err{ESPIPE};
+    }
+    return ok{};
+}
+
 result<ok, unix_err> bag_rdr::internal_map_file(const char* filename)
 {
     result_try(d->file_handle.open(filename));
