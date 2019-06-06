@@ -5,7 +5,7 @@ deps = []
 deps += dependency('liblz4')
 deps += declare_dependency(link_with : library('bz2'))
 
-common_cxx = declare_dependency(include_directories: 'deps/common_cxx')
+common_cxx = declare_dependency(include_directories : include_directories('deps/common_cxx'))
 deps += common_cxx
 
 includes = []
