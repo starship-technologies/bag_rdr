@@ -163,7 +163,7 @@ struct bag_rdr::view
         const bag_rdr::view& v;
         struct pos_ref { int32_t block; int32_t record; bool operator==(const pos_ref& other) const {return block == other.block && record == other.record; } };
         std::vector<pos_ref> connection_positions;
-        int32_t head_index = -1;
+        std::vector<int32_t> connection_order;
 
         struct constructor_start_tag {};
         iterator(const bag_rdr::view& v) : v(v) {};
@@ -171,10 +171,10 @@ struct bag_rdr::view
         iterator& operator=(const iterator&& other)
         {
             connection_positions = std::move(other.connection_positions);
-            head_index = other.head_index;
+            connection_order = std::move(other.connection_order);
             return *this;
         }
-        iterator(const iterator& other) : v(other.v), connection_positions{other.connection_positions}, head_index{other.head_index} {}
+        iterator(const iterator& other) : v(other.v), connection_positions{other.connection_positions}, connection_order{other.connection_order} {}
 
         bool operator==(const iterator& other) const {
             return connection_positions == other.connection_positions;

@@ -818,48 +818,75 @@ static bool increment_pos_ref(const bag_rdr::connection_record& conn, bag_rdr::v
 struct lowest_set
 {
     common::timestamp stamp;
-    size_t index;
+    int index = -1;
+    explicit operator bool() const
+    {
+        return index >= 0;
+    }
 };
 
-static common::optional<lowest_set> find_lowest(const std::vector<bag_rdr::connection_record*>& conn_ptrs,
-    const std::vector<bag_rdr::view::iterator::pos_ref>& positions,
-    const std::vector<bag_rdr::connection_record>& connections)
+static common::timestamp pos_ref_timestamp(const bag_rdr::view::iterator& it, int32_t index)
 {
-    common::optional<lowest_set> ret;
-    for (size_t i = 0; i < conn_ptrs.size(); ++i) {
-        const bag_rdr::connection_record& conn = *conn_ptrs[i];
-        const auto& pos = positions[i];
+    const bag_rdr::view::iterator::pos_ref& pos = it.connection_positions[index];
+    const bag_rdr::connection_record& conn = *it.v.m_connections[index];
+    const index_block& block = conn.blocks[pos.block];
+    const index_record& record = block.as_records()[pos.record];
+    return record.to_stamp();
+}
+
+static void iterator_construct_connection_order(bag_rdr::view::iterator& it)
+{
+    it.connection_order.clear();
+    for (size_t i = 0; i < it.connection_positions.size(); ++i) {
+        const bag_rdr::view::iterator::pos_ref& pos = it.connection_positions[i];
         if (pos.block == -1)
             continue;
+        const bag_rdr::connection_record& conn = *it.v.m_connections[i];
         if ((size_t)pos.block >= conn.blocks.size()) {
             fprintf(stderr, "bag_rdr: invalid bag: conn index referenced non-existent block (index: %d, conn.blocks.size(): %zu).\n", pos.block, conn.blocks.size());
-            return common::none{};
+            continue;
         }
-        const index_block& block = conn.blocks[pos.block];
-        const index_record& record = block.as_records()[pos.record];
-        if (!ret || (record.to_stamp() < ret->stamp)) {
-            if (!ret)
-                ret = lowest_set{.stamp = record.to_stamp(), .index = i};
-            ret->stamp = record.to_stamp();
-            ret->index = i;
-        }
+        it.connection_order.emplace_back(int32_t(i));
     }
-    return ret;
+    std::sort(it.connection_order.begin(), it.connection_order.end(), [&] (int32_t ia, int32_t ib) {
+        return pos_ref_timestamp(it, ia) < pos_ref_timestamp(it, ib);
+    });
+}
+
+// assumes we just consumed connection_order[0]
+static void iterator_update_connection_order(bag_rdr::view::iterator& it)
+{
+    size_t head_index = it.connection_order[0];
+    common::timestamp connection_next_stamp = pos_ref_timestamp(it, head_index);
+    if (it.v.m_end_time && (connection_next_stamp > it.v.m_end_time)) {
+        it.connection_order.erase(it.connection_order.begin());
+        return;
+    }
+    auto elem_above = std::lower_bound(it.connection_order.begin() + 1, it.connection_order.end(), connection_next_stamp, [&] (int32_t index, const common::timestamp& find_stamp) {
+        return pos_ref_timestamp(it, index) < find_stamp;
+    });
+    size_t index_after_first = std::distance(it.connection_order.begin(), elem_above) - 1;
+    if (index_after_first == 0)
+        return;
+
+    auto pos = std::move(it.connection_order.begin() + 1, elem_above, it.connection_order.begin());
+    *pos = head_index;
 }
 
 bag_rdr::view::iterator& bag_rdr::view::iterator::operator++()
 {
     if (connection_positions.empty())
         return *this;
-    increment_pos_ref(*v.m_connections[head_index], connection_positions[head_index]);
-    auto lowest = find_lowest(v.m_connections, connection_positions, v.rdr.d->connections);
-    if (!lowest) {
-        connection_positions.clear();
-    } else if (v.m_end_time && (lowest->stamp > v.m_end_time)) {
+    const size_t old_head_index = connection_order[0];
+    if (increment_pos_ref(*v.m_connections[old_head_index], connection_positions[old_head_index])) {
+        iterator_update_connection_order(*this);
+    } else {
+        connection_order.erase(connection_order.begin());
+    }
+    if (!connection_order.size()) {
         connection_positions.clear();
     } else {
-        head_index = lowest->index;
-
+        const size_t head_index = connection_order[0];
         const connection_record& conn = *v.m_connections[head_index];
         const pos_ref& head = connection_positions[head_index];
         const index_block& block = conn.blocks[head.block];
@@ -914,13 +941,13 @@ bag_rdr::view::iterator::iterator(const bag_rdr::view& v, constructor_start_tag)
             connection_positions[i] = find_starting_position(v, conn);
         }
     }
-    auto lowest = find_lowest(v.m_connections, connection_positions, v.rdr.d->connections);
-    if (!bool(lowest)) {
+    iterator_construct_connection_order(*this);
+    if (!connection_order.size()) {
         connection_positions.clear();
         return;
     }
 
-    head_index = lowest->index;
+    const size_t head_index = connection_order[0];
 
     const connection_record& conn = *v.m_connections[head_index];
     const pos_ref& head = connection_positions[head_index];
@@ -933,8 +960,9 @@ bag_rdr::view::iterator::iterator(const bag_rdr::view& v, constructor_start_tag)
 
 bag_rdr::view::message bag_rdr::view::iterator::operator*() const
 {
-    if (!assert_print(head_index != -1))
+    if (!assert_print(connection_order.size() > 0))
         abort();
+    const size_t head_index = connection_order[0];
     const connection_record& conn = *v.m_connections[head_index];
     const pos_ref& head = connection_positions[head_index];
     const index_block& block = conn.blocks[head.block];
