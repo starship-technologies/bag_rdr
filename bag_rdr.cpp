@@ -708,10 +708,11 @@ bag_rdr::view::view(const bag_rdr& rdr)
 
 void bag_rdr::view::ensure_indices()
 {
-    if (m_connection_indices.size())
+    if (m_connections.size())
         return;
-    m_connection_indices.resize(rdr.d->connections.size());
-    std::iota(m_connection_indices.begin(), m_connection_indices.end(), 0);
+    m_connections.reserve(rdr.d->connections.size());
+    for (auto& conn : rdr.d->connections)
+        m_connections.push_back(&conn);
 }
 
 bag_rdr::view bag_rdr::get_view() const
@@ -719,45 +720,45 @@ bag_rdr::view bag_rdr::get_view() const
     return view{*this};
 }
 
-static void add_connection_index(std::vector<int32_t>& indices, std::vector<bag_rdr::connection_record>& connections, common::string_view topic)
+static void add_connection_ptr(std::vector<bag_rdr::connection_record*>& connection_ptrs, std::vector<bag_rdr::connection_record>& connections, common::string_view topic)
 {
-    for (size_t i = 0; i < connections.size(); ++i) {
-        if (connections[i].data.topic.size() && (connections[i].topic != connections[i].data.topic)) {
+    for (bag_rdr::connection_record& conn : connections) {
+        if (conn.data.topic.size() && (conn.topic != conn.data.topic)) {
             fprintf(stderr, "bag_rdr: Inner topic [%zu]'%.*s' doesn't match outer '%.*s', not yet handled.\n",
-                connections[i].data.topic.size(), connections[i].data.topic.sizei(), connections[i].data.topic.data(),
-                connections[i].topic.sizei(), connections[i].topic.data());
+                conn.data.topic.size(), conn.data.topic.sizei(), conn.data.topic.data(),
+                conn.topic.sizei(), conn.topic.data());
         }
-        if (connections[i].topic == topic) {
-            auto it = std::find(indices.begin(), indices.end(), i);
-            if (it != indices.end())
+        if (conn.topic == topic) {
+            auto it = std::find(connection_ptrs.begin(), connection_ptrs.end(), &conn);
+            if (it != connection_ptrs.end())
                 break;
-            indices.emplace_back(i);
+            connection_ptrs.emplace_back(&conn);
         }
     }
 }
 
 void bag_rdr::view::set_topics(common::array_view<const std::string> topics)
 {
-    m_connection_indices.clear();
-    m_connection_indices.reserve(topics.size());
+    m_connections.clear();
+    m_connections.reserve(topics.size());
     for (const std::string& topic : topics)
-        add_connection_index(m_connection_indices, rdr.d->connections, topic);
+        add_connection_ptr(m_connections, rdr.d->connections, topic);
 }
 
 void bag_rdr::view::set_topics(array_view<const char*> topics)
 {
-    m_connection_indices.clear();
-    m_connection_indices.reserve(topics.size());
+    m_connections.clear();
+    m_connections.reserve(topics.size());
     for (const char* topic : topics)
-        add_connection_index(m_connection_indices, rdr.d->connections, topic);
+        add_connection_ptr(m_connections, rdr.d->connections, topic);
 }
 
 void bag_rdr::view::set_topics(std::initializer_list<const char*> topics)
 {
-    m_connection_indices.clear();
-    m_connection_indices.reserve(topics.size());
+    m_connections.clear();
+    m_connections.reserve(topics.size());
     for (const char* topic : topics)
-        add_connection_index(m_connection_indices, rdr.d->connections, topic);
+        add_connection_ptr(m_connections, rdr.d->connections, topic);
 }
 
 std::vector<common::string_view> bag_rdr::view::present_topics()
@@ -765,8 +766,8 @@ std::vector<common::string_view> bag_rdr::view::present_topics()
     ensure_indices();
     std::vector<common::string_view> ret;
 
-    for (size_t index: m_connection_indices) {
-        common::string_view topic = rdr.d->connections[index].data.topic;
+    for (const auto& conn : m_connections) {
+        common::string_view topic = conn->data.topic;
         auto it = std::find(ret.begin(), ret.end(), topic);
         if (it == ret.end())
             ret.emplace_back(std::move(topic));
@@ -778,8 +779,8 @@ bool bag_rdr::view::has_topic(common::string_view topic)
 {
     ensure_indices();
 
-    for (size_t index: m_connection_indices) {
-        if (rdr.d->connections[index].data.topic == topic)
+    for (const auto& conn : m_connections) {
+        if (conn->data.topic == topic)
             return true;
     }
     return false;
@@ -788,15 +789,14 @@ bool bag_rdr::view::has_topic(common::string_view topic)
 void bag_rdr::view::for_each_connection(const std::function<void (const connection_data& data)>& fn)
 {
     ensure_indices();
-    for (size_t index: m_connection_indices) {
-        const auto& conn = rdr.d->connections[index];
+    for (const auto& conn : m_connections) {
         fn(connection_data {
-            .topic = conn.topic,
-            .datatype = conn.data.type,
-            .md5sum = conn.data.md5sum,
-            .msg_def = conn.data.message_definition,
-            .callerid = conn.data.callerid,
-            .latching = conn.data.latching,
+            .topic = conn->topic,
+            .datatype = conn->data.type,
+            .md5sum = conn->data.md5sum,
+            .msg_def = conn->data.message_definition,
+            .callerid = conn->data.callerid,
+            .latching = conn->data.latching,
         });
     }
 }
@@ -821,13 +821,13 @@ struct lowest_set
     size_t index;
 };
 
-static common::optional<lowest_set> find_lowest(const std::vector<int32_t>& indices,
+static common::optional<lowest_set> find_lowest(const std::vector<bag_rdr::connection_record*>& conn_ptrs,
     const std::vector<bag_rdr::view::iterator::pos_ref>& positions,
     const std::vector<bag_rdr::connection_record>& connections)
 {
     common::optional<lowest_set> ret;
-    for (size_t i = 0; i < positions.size(); ++i) {
-        const bag_rdr::connection_record& conn = connections[indices[i]];
+    for (size_t i = 0; i < conn_ptrs.size(); ++i) {
+        const bag_rdr::connection_record& conn = *conn_ptrs[i];
         const auto& pos = positions[i];
         if (pos.block == -1)
             continue;
@@ -851,8 +851,8 @@ bag_rdr::view::iterator& bag_rdr::view::iterator::operator++()
 {
     if (connection_positions.empty())
         return *this;
-    increment_pos_ref(v.rdr.d->connections[v.m_connection_indices[head_index]], connection_positions[head_index]);
-    auto lowest = find_lowest(v.m_connection_indices, connection_positions, v.rdr.d->connections);
+    increment_pos_ref(*v.m_connections[head_index], connection_positions[head_index]);
+    auto lowest = find_lowest(v.m_connections, connection_positions, v.rdr.d->connections);
     if (!lowest) {
         connection_positions.clear();
     } else if (v.m_end_time && (lowest->stamp > v.m_end_time)) {
@@ -860,7 +860,7 @@ bag_rdr::view::iterator& bag_rdr::view::iterator::operator++()
     } else {
         head_index = lowest->index;
 
-        const connection_record& conn = v.rdr.d->connections[v.m_connection_indices[head_index]];
+        const connection_record& conn = *v.m_connections[head_index];
         const pos_ref& head = connection_positions[head_index];
         const index_block& block = conn.blocks[head.block];
         common::array_view<const char> chunk_memory = block.into_chunk->get_uncompressed();
@@ -907,14 +907,14 @@ static bag_rdr::view::iterator::pos_ref find_starting_position(const bag_rdr::vi
 bag_rdr::view::iterator::iterator(const bag_rdr::view& v, constructor_start_tag)
 : v(v)
 {
-    connection_positions.resize(v.m_connection_indices.size(), pos_ref{0, 0});
+    connection_positions.resize(v.m_connections.size(), pos_ref{0, 0});
     if (v.m_start_time) {
         for (size_t i = 0; i < connection_positions.size(); ++i) {
-            const connection_record& conn = v.rdr.d->connections[v.m_connection_indices[i]];
+            const connection_record& conn = *v.m_connections[i];
             connection_positions[i] = find_starting_position(v, conn);
         }
     }
-    auto lowest = find_lowest(v.m_connection_indices, connection_positions, v.rdr.d->connections);
+    auto lowest = find_lowest(v.m_connections, connection_positions, v.rdr.d->connections);
     if (!bool(lowest)) {
         connection_positions.clear();
         return;
@@ -922,7 +922,7 @@ bag_rdr::view::iterator::iterator(const bag_rdr::view& v, constructor_start_tag)
 
     head_index = lowest->index;
 
-    const connection_record& conn = v.rdr.d->connections[v.m_connection_indices[head_index]];
+    const connection_record& conn = *v.m_connections[head_index];
     const pos_ref& head = connection_positions[head_index];
     const index_block& block = conn.blocks[head.block];
     common::array_view<const char> chunk_memory = block.into_chunk->get_uncompressed();
@@ -935,7 +935,7 @@ bag_rdr::view::message bag_rdr::view::iterator::operator*() const
 {
     if (!assert_print(head_index != -1))
         abort();
-    const connection_record& conn = v.rdr.d->connections[v.m_connection_indices[head_index]];
+    const connection_record& conn = *v.m_connections[head_index];
     const pos_ref& head = connection_positions[head_index];
     const index_block& block = conn.blocks[head.block];
     const index_record& rec = block.as_records()[head.record];

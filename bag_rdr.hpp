@@ -128,6 +128,8 @@ struct bag_rdr::message
     const connection_record* connection;
 };
 
+struct connection_record;
+
 struct bag_rdr::view
 {
     view(const bag_rdr& rdr);
@@ -206,7 +208,7 @@ struct bag_rdr::view
 
     // detail
     const bag_rdr& rdr;
-    std::vector<int32_t> m_connection_indices;
+    std::vector<connection_record*> m_connections;
     timestamp m_start_time, m_end_time;
 };
 
