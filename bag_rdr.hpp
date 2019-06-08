@@ -136,6 +136,7 @@ struct bag_rdr::view
     void set_topics(array_view<const std::string> topics);
     void set_topics(array_view<const char*> topics);
     void set_topics(std::initializer_list<const char*> topics);
+    void set_topics(array_view<string_view> topics);
 
     // C++11 ref-qualifiers for member functions
     // this prevents range-based for from not storing the result because it is of reference type
@@ -143,6 +144,8 @@ struct bag_rdr::view
     view  with_topics(array_view<const std::string> topics) && { set_topics(topics); return *this; }
     view& with_topics(array_view<const char*> topics) &  { set_topics(topics); return *this; }
     view  with_topics(array_view<const char*> topics) && { set_topics(topics); return *this; }
+    view& with_topics(array_view<string_view> topics) &  { set_topics(topics); return *this; }
+    view  with_topics(array_view<string_view> topics) && { set_topics(topics); return *this; }
     view& with_topics(std::initializer_list<const char*> topics) &  { set_topics(topics); return *this; }
     view  with_topics(std::initializer_list<const char*> topics) && { set_topics(topics); return *this; }
     view& with_start_time(timestamp start_time) &  { m_start_time = start_time; return *this; }

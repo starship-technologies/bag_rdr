@@ -761,6 +761,14 @@ void bag_rdr::view::set_topics(std::initializer_list<const char*> topics)
         add_connection_ptr(m_connections, rdr.d->connections, topic);
 }
 
+void bag_rdr::view::set_topics(array_view<common::string_view> topics)
+{
+    m_connections.clear();
+    m_connections.reserve(topics.size());
+    for (const common::string_view& topic : topics)
+        add_connection_ptr(m_connections, rdr.d->connections, topic);
+}
+
 std::vector<common::string_view> bag_rdr::view::present_topics()
 {
     ensure_indices();
