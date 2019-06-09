@@ -371,7 +371,7 @@ struct lz4f_ctx
         if (ctx)
             LZ4F_freeDecompressionContext(ctx);
     }
-    operator LZ4F_dctx*() {
+    operator LZ4F_decompressionContext_t() {
         return ctx;
     }
 };
