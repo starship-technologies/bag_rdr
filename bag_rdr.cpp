@@ -366,7 +366,7 @@ chunk::chunk(record r)
 
 struct lz4f_ctx
 {
-    LZ4F_dctx* ctx{nullptr};
+    LZ4F_decompressionContext_t ctx{nullptr};
     ~lz4f_ctx() {
         if (ctx)
             LZ4F_freeDecompressionContext(ctx);
