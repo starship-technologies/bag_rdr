@@ -34,7 +34,9 @@
 #include <unistd.h>
 #include <numeric>
 
+#ifndef DISABLE_BZ2
 #include <bzlib.h>
+#endif // DISABLE_BZ2
 #ifdef BAG_RDR_USE_SYSTEM_LZ4
 #include <lz4frame.h>
 #else
@@ -423,6 +425,7 @@ bool chunk::decompress()
 
     switch (type) {
         case BZ2: {
+#ifndef DISABLE_BZ2
             const int bzapi_small = 0;
             const int bzapi_verbosity = 0;
             unsigned int dest_len = uncompressed_buffer.size();
@@ -435,6 +438,10 @@ bool chunk::decompress()
                 fprintf(stderr, "chunk::decompress: bzip2 decompression returned %d\n", bzip2_ret);
                 return false;
             }
+#else // DISABLE_BZ2
+            fprintf(stderr, "chunk::decompress: bzip2 disabled\n");
+            return false;
+#endif // DISABLE_BZ2
             break;
         }
         case LZ4: {

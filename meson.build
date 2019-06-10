@@ -3,7 +3,6 @@ add_project_arguments(['-Wno-maybe-uninitialized'], language : 'cpp')
 
 deps = []
 deps += dependency('liblz4')
-deps += declare_dependency(link_with : library('bz2'))
 
 common_cxx = declare_dependency(include_directories : include_directories('deps/common_cxx'))
 deps += common_cxx
@@ -11,6 +10,12 @@ deps += common_cxx
 includes = []
 
 extra_args = ['-DBAG_RDR_NO_ROS=1', '-DBAG_RDR_USE_SYSTEM_LZ4=1']
+extra_args += get_option('extra_opt_flags')
+if get_option('disable_bz2')
+  extra_args += '-DDISABLE_BZ2'
+else
+  deps += declare_dependency(link_with : library('bz2'))
+endif
 
 sources = ['bag_rdr.cpp']
 lib = static_library('bag_rdr', sources, cpp_args: extra_args, dependencies: deps, install: true)

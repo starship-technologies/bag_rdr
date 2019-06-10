@@ -1,0 +1,2 @@
+option('extra_opt_flags', type: 'array', description: 'extra compiler optimisation flags')
+option('disable_bz2', type: 'boolean', description: 'disable bzip2 support, libbz2 usage')
