@@ -211,7 +211,7 @@ struct bag_rdr::view
 
     // detail
     const bag_rdr& rdr;
-    std::vector<connection_record*> m_connections;
+    common::optional<std::vector<connection_record*>> m_connections;
     timestamp m_start_time, m_end_time;
 };
 
