@@ -656,7 +656,8 @@ bool bag_rdr::internal_load_records()
             break;
           }
           case header::op::CHUNK_INFO: {
-            common::optional<int32_t> ver, chunk_pos, count;
+            common::optional<int64_t> chunk_pos;
+            common::optional<int32_t> ver, count;
             common::optional<common::timestamp> start_time, end_time;
             hdrs.extract_headers("ver", ver, "chunk_pos", chunk_pos, "count", count, "start_time", start_time, "end_time", end_time);
             if (!assert_print(ver && chunk_pos && count && start_time && end_time))
