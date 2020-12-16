@@ -39,3 +39,7 @@ pkg.generate(lib,
              description : 'A fast ROS bag reading library.',
              subdirs: ['.', 'common_cxx'],
              extra_cflags : extra_args)
+
+# For wrap/subproject use
+bag_rdr_dep = declare_dependency(link_with: [lib], include_directories: ['.'], dependencies: deps, compile_args: extra_args)
+meson.override_dependency('bag_rdr', bag_rdr_dep)
