@@ -1,11 +1,16 @@
-project('bag_rdr', 'cpp', default_options: ['cpp_std=c++11'])
+project('bag_rdr', 'cpp', default_options: ['cpp_std=c++14'], version: '0.1.0')
 add_project_arguments(['-Wno-maybe-uninitialized'], language : 'cpp')
 
 deps = []
 deps += dependency('liblz4')
 
-common_cxx = declare_dependency(include_directories : include_directories('deps/common_cxx'))
-deps += common_cxx
+if not get_option('common_cxx_fetch')
+  common_cxx = declare_dependency(include_directories : include_directories('deps/common_cxx'))
+  deps += common_cxx
+else
+  common_cxx = dependency('common_cxx')
+  deps += common_cxx
+endif
 
 includes = []
 
@@ -20,7 +25,9 @@ endif
 sources = ['bag_rdr.cpp']
 lib = static_library('bag_rdr', sources, cpp_args: extra_args, dependencies: deps, install: true)
 install_headers('bag_rdr.hpp')
-install_subdir('deps/common_cxx', install_dir : 'include')
+if not get_option('common_cxx_fetch')
+  install_subdir('deps/common_cxx', install_dir : 'include')
+endif
 
 pkg = import('pkgconfig')
 libs = deps

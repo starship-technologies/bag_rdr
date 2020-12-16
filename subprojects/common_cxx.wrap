@@ -1,0 +1,3 @@
+[wrap-git]
+url = https://github.com/starship-technologies/common_cxx.git
+revision = v0.1.0
