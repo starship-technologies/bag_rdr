@@ -33,6 +33,7 @@ pkg = import('pkgconfig')
 libs = deps
 h = includes
 pkg.generate(lib,
+             libraries: deps,
              version : '0.1',
              name : 'bag_rdr',
              filebase : 'bag_rdr',
