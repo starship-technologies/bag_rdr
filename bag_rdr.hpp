@@ -51,7 +51,19 @@ struct bag_rdr
     template <typename T>
     using array_view  = common::array_view<T>;
 
+    struct options {
+        /**
+         * This makes open bag_rdr instance safe for multi-threaded access,
+         * not including open* or destruction.
+         *
+         * Each thread should have its own views and iterators,
+         * these are not protected for multi-threaded access.
+         */
+        bool threadsafe{false};
+    };
+
     bag_rdr();
+    bag_rdr(options opts);
     ~bag_rdr();
     bool open(const char* filename);
     result<ok, unix_err> open_detailed(const char* filename);

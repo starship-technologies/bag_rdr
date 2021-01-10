@@ -33,6 +33,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <numeric>
+#include <mutex>
 
 #ifndef DISABLE_BZ2
 #include <bzlib.h>
@@ -254,6 +255,23 @@ struct chunk_info
     int32_t message_count;
 };
 
+// Protect against simultaneous decompression
+// and insure we don't overwrite/free
+// uncompressed memory blocks once written
+// and possibly in use by other threads.
+//
+// This means decompression is one-way,
+// and must only happen once.
+//
+// std::mutex/std::atomic are not copyable/moveable,
+// but we never want to move/copy them, only initialise
+// them once per chunk in place
+struct chunk_threading_noncopying : public common::optional<std::mutex>
+{
+    chunk_threading_noncopying() noexcept = default;
+    chunk_threading_noncopying(const chunk_threading_noncopying&) noexcept : common::optional<std::mutex>{common::none{}} {}
+};
+
 struct chunk
 {
     chunk(record r);
@@ -263,6 +281,7 @@ struct chunk
     std::vector<char> uncompressed_buffer;
     int32_t uncompressed_size = 0;
     chunk_info info;
+    chunk_threading_noncopying decompression_lock;
 
     enum chunk_type {
         NORMAL,
@@ -270,9 +289,23 @@ struct chunk
         LZ4,
     } type;
 
+    constexpr bool requires_decompression() const noexcept { return type != NORMAL; }
+    void setup_multithreaded()
+    {
+        if (!requires_decompression())
+            return;
+        this->decompression_lock.reset_default();
+    }
     bool decompress();
     common::array_view<const char> get_uncompressed()
     {
+        if (!requires_decompression())
+            return uncompressed;
+
+        common::optional<std::lock_guard<std::mutex>> guard;
+        decompression_lock.with([&guard] (std::mutex& m) mutable {
+            guard.emplace(m);
+        });
         if (uncompressed.size())
             return uncompressed;
         if (decompress())
@@ -421,6 +454,9 @@ bool chunk::decompress()
     if (!assert_print((type == BZ2) || (type == LZ4)))
         return false;
 
+    if (type == NORMAL)
+        return true;
+
     uncompressed_buffer.resize(uncompressed_size);
 
     switch (type) {
@@ -483,11 +519,18 @@ struct bag_rdr::priv
 
     std::vector<connection_record> connections;
     std::vector<chunk> chunks;
+    bag_rdr::options opts;
 };
 
 bag_rdr::bag_rdr()
 : d(new priv)
 {
+}
+
+bag_rdr::bag_rdr(bag_rdr::options opts)
+: d(new priv)
+{
+    d->opts = std::move(opts);
 }
 
 bag_rdr::~bag_rdr()
@@ -675,6 +718,11 @@ bool bag_rdr::internal_load_records()
           case header::op::UNSET:
           default:
              fprintf(stderr, "bag_rdr: Unknown record operation 0x%hhx\n", int8_t(op));
+        }
+    }
+    if (d->opts.threadsafe) {
+        for (chunk& ch : d->chunks) {
+            ch.setup_multithreaded();
         }
     }
     return true;

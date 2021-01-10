@@ -1,4 +1,4 @@
-project('bag_rdr', 'cpp', default_options: ['cpp_std=c++14'], version: '0.1.0')
+project('bag_rdr', 'cpp', default_options: ['cpp_std=c++14'], version: '0.2.0')
 add_project_arguments(['-Wno-maybe-uninitialized'], language : 'cpp')
 
 deps = []
