@@ -268,7 +268,7 @@ struct chunk_info
 // them once per chunk in place
 struct chunk_threading_noncopying : public common::optional<std::mutex>
 {
-    chunk_threading_noncopying() noexcept = default;
+    chunk_threading_noncopying() noexcept {}
     chunk_threading_noncopying(const chunk_threading_noncopying&) noexcept : common::optional<std::mutex>{common::none{}} {}
 };
 
