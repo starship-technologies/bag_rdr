@@ -112,6 +112,12 @@ struct bag_rdr::message
         string_view t_md5sum = ros::message_traits::MD5Sum<T>::value();
         return (t_md5sum == "*") || (t_md5sum == md5);
     }
+    template <typename T>
+    struct has_morph {
+        template<typename U> static auto test(int) -> decltype(&U::morph, std::true_type{});
+        template<typename U> static auto test(...) -> std::false_type;
+        static constexpr bool value = decltype(test<T>(0))::value;
+    };
     // Use for e.g. topic_tools::ShapeShifter
     template <class T>
     void pre_deserialise(T& t) const
@@ -125,6 +131,12 @@ struct bag_rdr::message
         map["message_definition"] = message_definition().to_string();
         map["latching"] = latching_str().to_string();
         ros::serialization::PreDeserialize<T>::notify(predes);
+    }
+    // Faster direct version for topic_tools::ShapeShifter only
+    template <class T>
+    typename std::enable_if<has_morph<T>::value, void>::type pre_deserialise(T& t) const
+    {
+        t.morph(md5.to_string(), data_type().to_string(), message_definition().to_string(), latching_str().to_string());
     }
 #endif // !defined(BAG_RDR_NO_ROS)
 
