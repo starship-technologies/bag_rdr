@@ -120,7 +120,7 @@ struct bag_rdr::message
     };
     // Use for e.g. topic_tools::ShapeShifter
     template <class T>
-    void pre_deserialise(T& t) const
+    typename std::enable_if<!has_morph<T>::value, void>::type pre_deserialise(T& t) const
     {
         ros::serialization::PreDeserializeParams<T> predes;
         std::map<std::string, std::string> map;
