@@ -14,8 +14,13 @@ endif
 
 includes = []
 
-extra_args = ['-DBAG_RDR_NO_ROS=1', '-DBAG_RDR_USE_SYSTEM_LZ4=1']
+extra_args = ['-DBAG_RDR_USE_SYSTEM_LZ4=1']
 extra_args += get_option('extra_opt_flags')
+if not get_option('enable_ros')
+  extra_args += '-DBAG_RDR_NO_ROS=1'
+else
+  deps += dependency('roscpp_serialization')
+endif
 if get_option('disable_bz2')
   extra_args += '-DDISABLE_BZ2'
 else

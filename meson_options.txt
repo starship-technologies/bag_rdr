@@ -1,3 +1,4 @@
 option('extra_opt_flags', type: 'array', description: 'extra compiler optimisation flags')
 option('disable_bz2', type: 'boolean', description: 'disable bzip2 support, libbz2 usage')
 option('common_cxx_fetch', type: 'boolean', value: true, description: 'fetch common_cxx via meson wrap')
+option('enable_ros', type: 'boolean', description: 'enable ROS support')
