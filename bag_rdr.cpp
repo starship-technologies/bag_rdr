@@ -34,6 +34,7 @@
 #include <unistd.h>
 #include <numeric>
 #include <mutex>
+#include <map>
 
 #ifndef DISABLE_BZ2
 #include <bzlib.h>
@@ -621,6 +622,16 @@ bool bag_rdr::internal_load_records()
     // offset into file of first record after chunk/index_data
     using lld_t = long long;
     int64_t index_pos = 0;
+    std::map<int32_t, connection_record> connections_by_id;
+    size_t header_conn_count = 0;
+    auto connection_for_id = [&connections_by_id, &header_conn_count] (int32_t conn_id) -> connection_record* {
+        auto it = connections_by_id.find(conn_id);
+        if (it != connections_by_id.end())
+            return &it->second;
+        if (!assert_print((conn_id >= 0) && (connections_by_id.size() < header_conn_count)))
+            return nullptr;
+        return &connections_by_id[conn_id];
+    };
     while (remaining.size()) {
         record r{remaining};
         if (r.is_null_record()) {
@@ -654,7 +665,7 @@ bool bag_rdr::internal_load_records()
                 return true;
             if (!assert_print((conn_count.get() > 0) && (chunk_count.get() > 0) && (c_index_pos.get() > 64)))
                 return false;
-            d->connections.resize(conn_count.get());
+            header_conn_count = size_t(conn_count.get());
             d->chunks.reserve(chunk_count.get());
             index_pos = *c_index_pos;
             break;
@@ -672,10 +683,10 @@ bool bag_rdr::internal_load_records()
             if (!assert_print(ver && conn && count))
                 continue;
             assert_printv(count.get()*sizeof(index_record) == r.memory_data.size(), count.get()*sizeof(index_record));
-            const int32_t conn_id = conn.get();
-            if (!assert_print((conn_id >= 0) && (size_t(conn_id) < d->connections.size())))
+            connection_record* conn_record = connection_for_id(conn.get());
+            if (!conn_record)
                 continue;
-            d->connections[conn.get()].blocks.emplace_back(index_block{.memory=r.memory_data, .into_chunk=&d->chunks.back()});
+            conn_record->blocks.emplace_back(index_block{.memory=r.memory_data, .into_chunk=&d->chunks.back()});
             break;
           }
           case header::op::CONNECTION: {
@@ -684,15 +695,15 @@ bool bag_rdr::internal_load_records()
             hdrs.extract_headers("conn", conn, "topic", topic);
             if (!assert_print(conn && topic))
                 continue;
-            const int32_t conn_id = conn.get();
-            if (!assert_print((conn_id >= 0) && (size_t(conn_id) < d->connections.size())))
+            connection_record* conn_record = connection_for_id(conn.get());
+            if (!conn_record)
                 continue;
 
             connection_data data{r.memory_data};
             if (!data.md5sum.size())
                 continue;
-            d->connections[conn_id].topic = topic.get();
-            d->connections[conn_id].data = data;
+            conn_record->topic = topic.get();
+            conn_record->data = data;
             break;
           }
           case header::op::MESSAGE_DATA: {
@@ -720,6 +731,9 @@ bool bag_rdr::internal_load_records()
              fprintf(stderr, "bag_rdr: Unknown record operation 0x%hhx\n", int8_t(op));
         }
     }
+    d->connections.reserve(connections_by_id.size());
+    for (auto& id_and_record : connections_by_id)
+        d->connections.push_back(std::move(id_and_record.second));
     if (d->opts.threadsafe) {
         for (chunk& ch : d->chunks) {
             ch.setup_multithreaded();
